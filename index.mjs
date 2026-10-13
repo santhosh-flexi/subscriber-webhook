@@ -252,6 +252,10 @@ function buildWebhookQuery(postData, subscriberData, tabPrefix) {
 function preparePaymentForm(postData, subscriberData) {
   const paymentForm = { ...postData };
 
+  if (postData.pay_currency) {
+    paymentForm.currency = postData.pay_currency;
+  }
+
   // Transform product data
   if (typeof paymentForm.p_id !== "undefined") {
     paymentForm.product_id = paymentForm.p_id;
