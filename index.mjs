@@ -391,8 +391,10 @@ async function addSubscriptionDataToForm(paymentForm, postData) {
     subscription_id: subscription.subscription_id,
     status: subscription.user_status || subscription.status,
     plan_name: subscription.data?.plan_name,
-    billing_interval: subscription.billing_interval,
-    billing_interval_count: subscription.billing_interval_count,
+    ...vendorBillingInterval(
+      subscription.billing_interval,
+      subscription.billing_interval_count
+    ),
     billing_frequency: billingFrequencyLabel(
       subscription.billing_interval,
       subscription.billing_interval_count
@@ -1052,8 +1054,10 @@ async function deliverSubscriptionWebhook(rule, envelope) {
     transaction_id: envelope.data?.payment_id,
     subscription_id: envelope.data?.subscription_id,
     plan_name: envelope.data?.plan_name,
-    billing_interval: envelope.data?.billing_interval,
-    billing_interval_count: envelope.data?.billing_interval_count,
+    ...vendorBillingInterval(
+      envelope.data?.billing_interval,
+      envelope.data?.billing_interval_count
+    ),
     billing_frequency: billingFrequencyLabel(
       envelope.data?.billing_interval,
       envelope.data?.billing_interval_count
@@ -1266,4 +1270,12 @@ export async function handleSubscriptionEvent(detail, context) {
       dead: deadCount,
     },
   };
+}
+
+function vendorBillingInterval(interval, intervalCount) {
+  const frequencyLabel = billingFrequencyLabel(interval, intervalCount);
+  if (!frequencyLabel || frequencyLabel.startsWith("every ")) {
+    return { billing_interval: interval, billing_interval_count: intervalCount };
+  }
+  return { billing_interval: frequencyLabel, billing_interval_count: 1 };
 }
