@@ -39,7 +39,7 @@ async function claimPurchaseDelivery(tabPrefix, subscriberId) {
 
 export const handler = async (event, context) => {
   console.log('Webhook Lambda triggered');
-  console.log('Event:', JSON.stringify(event, null, 2));
+  console.log('Event:', JSON.stringify(event, null, 2).replace(/(renew=[^.&"\\]+\.)[A-Za-z0-9]+/g, "$1[redacted]"));
 
   const detail = event.detail;
 
@@ -103,7 +103,7 @@ export const handler = async (event, context) => {
     if (cartAbondSkip === 0) {
       await addSubscriptionDataToForm(paymentForm, postData);
     }
-    console.log('Payment form prepared:', paymentForm);
+    console.log('Payment form prepared:', { ...paymentForm, ...(paymentForm.pay_now_url ? { pay_now_url: '[redacted]' } : {}) });
 
     // Parse bump data
     const { rlBumpPid, bumpData } = parseBumpData(subscriberData);
@@ -356,6 +356,7 @@ async function addSubscriptionDataToForm(paymentForm, postData) {
   }
 
   let subscription;
+  const renewalSubscriptionId = postData.renewal_subscription_id ? String(postData.renewal_subscription_id) : "";
   try {
     const result = await docClient.send(
       new QueryCommand({
@@ -368,7 +369,9 @@ async function addSubscriptionDataToForm(paymentForm, postData) {
     const productId = Number(postData.p_id || postData.product_id) || 0;
     subscription = (result.Items || []).find(
       (item) =>
-        String(item?.data?.order_id || "") === String(orderId) &&
+        (renewalSubscriptionId
+          ? String(item?.subscription_id) === renewalSubscriptionId
+          : String(item?.data?.order_id || "") === String(orderId)) &&
         (!productId || Number(item?.product_id) === productId)
     );
   } catch (error) {
@@ -387,7 +390,7 @@ async function addSubscriptionDataToForm(paymentForm, postData) {
   // its period end stays "" until the gateway lifecycle webhook lands. Send only
   // what actually has a value rather than empty strings the vendor has to filter.
   const fields = {
-    subscription_event: "subscription.created",
+    subscription_event: renewalSubscriptionId ? "subscription.renewal_payment" : "subscription.created",
     subscription_id: subscription.subscription_id,
     status: subscription.user_status || subscription.status,
     plan_name: subscription.data?.plan_name,
@@ -404,6 +407,9 @@ async function addSubscriptionDataToForm(paymentForm, postData) {
     recurring_amount: subscription.amount,
     tax_mode: subscription.data?.tax_mode,
     tax_status: subscription.data?.tax_status === "dropped" ? "not_enabled" : subscription.data?.tax_status,
+    billing_mode: subscription.data?.billing_mode,
+    pay_now_url: subscription.data?.billing_mode === "manual" && !renewalSubscriptionId ? subscription.data?.renewal_url : undefined,
+    grace_days: subscription.data?.billing_mode === "manual" ? subscription.data?.grace_days : undefined,
   };
   for (const [key, value] of Object.entries(fields)) {
     if (value !== undefined && value !== null && value !== "") {
