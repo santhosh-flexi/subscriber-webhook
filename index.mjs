@@ -270,11 +270,24 @@ function preparePaymentForm(postData, subscriberData) {
     try {
       const utmObj = JSON.parse(paymentForm.flexi_tracking);
       if (utmObj?.params) {
-        paymentForm.utm_campaign = utmObj.params.utm_campaign;
-        paymentForm.utm_content = utmObj.params.utm_content;
-        paymentForm.utm_medium = utmObj.params.utm_medium;
-        paymentForm.utm_source = utmObj.params.utm_source;
-        paymentForm.utm_term = utmObj.params.utm_term;
+        const p = utmObj.params;
+        // Never overwrite a good top-level value with undefined. The browser sends
+        // utm_* at the top level AND a flexi_tracking.params object whose keys belong
+        // to the ff scheme (source / utmmedium / medium / targetingname / adname).
+        // Reading only params.utm_* blanked these five fields in every vendor webhook
+        // the day those keys were renamed. Order of preference: legacy key, ff-scheme
+        // equivalent, then whatever was already on the form.
+        const firstSet = (...vals) =>
+          vals.find((v) => v !== undefined && v !== null && v !== '');
+        const keep = (field, ...vals) => {
+          const v = firstSet(...vals);
+          if (v !== undefined) paymentForm[field] = v;
+        };
+        keep('utm_source',   paymentForm.utm_source,   p.utm_source,   p.source);
+        keep('utm_medium',   paymentForm.utm_medium,   p.utm_medium,   p.utmmedium);
+        keep('utm_campaign', paymentForm.utm_campaign, p.utm_campaign, p.medium);
+        keep('utm_term',     paymentForm.utm_term,     p.utm_term,     p.targetingname);
+        keep('utm_content',  paymentForm.utm_content,  p.utm_content,  p.adname);
       }
     } catch (e) {
       console.log('Failed to parse flexi_tracking:', e.message);
